@@ -4,7 +4,9 @@ pub struct ToyVec<T> {
 }
 
 pub struct Iter<'vec, T> {
-    elements: &
+    elements: &'vec Box<[T]>,
+    len: usize,
+    pos: usize,
 }
 
 impl <T: Default> ToyVec<T> {
@@ -75,6 +77,14 @@ impl <T: Default> ToyVec<T> {
         }
     }
 
+    pub fn iter<'vec>(&'vec self) -> Iter<'vec, T> {
+        Iter {
+            elements: &self.elements,
+            len: self.len,
+            pos: 0,
+        }
+    }
+
     fn allocate_in_heap(size: usize) -> Box<[T]> {
         std::iter::repeat_with(Default::default)
             .take(size)
@@ -83,3 +93,16 @@ impl <T: Default> ToyVec<T> {
     }
 }
 
+impl <'vec, T> Iterator for Iter<'vec, T> {
+    type Item = &'vec T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.len {
+            None
+        } else {
+            let res = Some(&self.elements[self.pos]);
+            self.pos += 1;
+            res
+        }
+    }
+}
