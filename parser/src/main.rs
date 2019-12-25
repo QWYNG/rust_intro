@@ -81,6 +81,92 @@ impl LexError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum AstKind {
+    Num(u64),
+    UniOp { op: UniOp, e: Box<Ast> },
+    BinOp { op: BinOp, l: Box<Ast>, r: Box<Ast> },
+}
+
+type Ast = Annot<AstKind>;
+
+impl Ast {
+    fn num(n: u64, loc: loc) -> Self {
+        Self::new(AstKind::Num(n), loc)
+    }
+
+    fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
+        Self::new(AstKind::UniOp { op, e: Box::new(e) }, loc)
+    }
+
+    fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
+        Self::new(
+            AstKind::BinOp {
+                op,
+                l: Box::new(l),
+                r: Box::new(r),
+            },
+            loc,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum UnionOpKind {
+    Plus,
+    Minus,
+}
+
+type UniOp = Annot<UnionOpKind>;
+
+impl UniOp {
+    fn plus(loc: Loc) -> Self {
+        Self::new(UnionOpKind::Plus, loc)
+    }
+
+    fn minus(loc: Loc) -> Self {
+        Self::new(UnionOpKind::Minus, loc)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum BinOpKind {
+    Add,
+    Sub,
+    Mult,
+    Div,
+}
+
+type BinOp = Annot<BinOpKind>;
+
+impl BinOp {
+    fn add(loc: Loc) -> Self {
+        Self::new(BinOpKind::Add, loc)
+    }
+
+    fn sub(loc: Loc) -> Self {
+        Self::new(BinOpKind::Sub, loc)
+    }
+
+    fn mult(loc: Loc) -> Self {
+        Self::new(BinOpKind::Mult, loc)
+    }
+
+    fn div(loc: Loc) -> Self {
+        Self::new(BinOpKind::Div, loc)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ParseError {
+    UnexpectedToken(Token),
+    NotExpression(Token),
+    NotOperator(Token),
+    UnclosedOpenParen(Token),
+    RedundantExpression(Token),
+    Eof,
+}
+
 fn lex(input: &str) -> Result<Vec<Token>, LexError> {
     let mut tokens = Vec::new();
     let input = input.as_bytes();
