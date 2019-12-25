@@ -262,6 +262,52 @@ fn skip_spaces(input: &[u8], pos: usize) -> Result<((), usize), LexError> {
     Ok(((), pos))
 }
 
+fn parse(tokens: Vec<Token>) -> Result<Ast, ParseError> {
+    let mut tokens = tokens.into_iter().peekable();
+    let ret = parse_expr(&mut tokens)?;
+    match tokens.next() {
+        Some(token) => Err(ParseError::RedundantExpression(token)),
+        None => Ok(ret),
+    }
+}
+
+fn parse_expr<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<Ast, ParseError>
+where
+    Tokens: Iterator<Item = Token>,
+{
+    parse_expr3(tokens)
+}
+
+fn parse_expr3<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<Ast, ParseError>
+where
+    Tokens: Iterator<Item = Token>,
+{
+    match parse_expr3(tokens) {
+        Err(_) => parse_expr2(tokens),
+        Ok(e) => match tokens.peek().map(|token| token.value) {
+            Some(TokenKind::Plus) | Some(TokenKind::Minus) => {
+                let op = match tokens.next().unwrap() {
+                    Token {
+                        value: TokenKind::Plus,
+                        loc,
+                    } => BinOp::add(loc),
+                    Token {
+                        value: TokenKind::Minus,
+                        loc,
+                    } => BinOp::Sub(loc),
+                    _ => unreachable!(),
+                };
+
+                let r = parse_expr2(tokens)?;
+                let loc = e.loc.merge(&r.loc);
+                Ok(Ast::binop(op, e, r, loc))
+            }
+            Some(_) => Err(ParseError::UnexpectedToken(tokens.next().unwrap())),
+            None => Err(ParseError::Eof),
+        },
+    }
+}
+
 #[test]
 fn test_lexer() {
     assert_eq!(
@@ -279,7 +325,10 @@ fn test_lexer() {
     )
 }
 
+use std::f32::consts::E;
+use std::intrinsics::likely;
 use std::io;
+use std::iter::Peekable;
 
 fn prompt(s: &str) -> io::Result<()> {
     use std::io::{stdout, Write};
