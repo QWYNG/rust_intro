@@ -111,14 +111,6 @@ impl Ast {
     }
 }
 
-impl FromStr for Ast {
-    type Err = Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let tokens = lex(s)?;
-        let ast = parse(tokens)?;
-        Ok(ast)
-    }
-}
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum UnionOpKind {
     Plus,
@@ -408,7 +400,17 @@ where
     }
     Ok(e)
 }
-#[deribe(Debug, Clone, PartialEq, Eq, Hash)]
+
+impl FromStr for Ast {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let tokens = lex(s)?;
+        let ast = parse(tokens)?;
+        Ok(ast)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Error {
     Lexer(LexError),
     Parser(ParseError),
@@ -426,6 +428,81 @@ impl From<ParseError> for Error {
     }
 }
 
+use std::fmt;
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::TokenKind::*;
+        match self {
+            Number(n) => n.fmt(f),
+            Plus => write!(f, "+"),
+            Minus => write!(f, "-"),
+            Asterisk => write!(f, "*"),
+            Slash => write!(f, "/"),
+            LParen => write!(f, "("),
+            RParen => write!(f, ")"),
+        }
+    }
+}
+
+impl fmt::Display for Loc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} - {}", self.0, self.1)
+    }
+}
+
+impl fmt::Display for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::LexErrorKind::*;
+        let loc = &self.1;
+        match self.0 {
+            InvalidChar(c) => write!(f, "{}: invalid char '{}'", loc, c),
+            Eof => write!(f, "End of file"),
+        }
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::ParseError::*;
+        match self {
+            UnexpectedToken(tok) => write!(f, "{}: {} is not expected", tok.loc, tok.value),
+            NotExpression(tok) => write!(
+                f,
+                "{}: '{}' is not a start of expression",
+                tok.loc, tok.kind
+            ),
+            NotOperator(tok) => write!(f, "{}: '{}' is not an operator", tok.loc, tok.kind),
+            UnclosedOpenParen(token) => write!(f, "{}: '{}' is not closed", token.loc, token.kind),
+            RedundantExpression(token) => write!(
+                f,
+                "{}: expresion after '{}' is redundant",
+                token.loc, token.kind
+            ),
+            Eof => write!(f, "End of file"),
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "parser error")
+    }
+}
+
+use std::error::Error as StdError;
+impl StdError for LexError {}
+impl StdError for ParseError {}
+
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        use self::Error::*;
+        match self {
+            Lexer(lex) => Some(lex),
+            Parser(parse) => Some(parse),
+        }
+    }
+}
 #[test]
 fn test_lexer() {
     assert_eq!(
@@ -480,8 +557,10 @@ fn test_parser() {
         ))
     )
 }
+
 use std::io;
 use std::iter::Peekable;
+use std::str::FromStr;
 
 fn prompt(s: &str) -> io::Result<()> {
     use std::io::{stdout, Write};
@@ -505,7 +584,15 @@ fn main() {
         if let Some(Ok(line)) = lines.next() {
             let ast = match line.parse::<Ast>() {
                 Ok(ast) => ast,
-                Err(e) => unimplemented!(),
+                Err(e) => {
+                    eprintln!("{}", e);
+                    let mut source = e.source();
+                    while let Some(e) = source {
+                        eprintln!("caused by {}", e);
+                        source = e.source()
+                    }
+                    continue;
+                }
             };
             println!("{:?}", ast);
         } else {
